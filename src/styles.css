@@ -3,3 +3,5 @@
 .toolbar>label{max-width:100%;min-width:0}.toolbar select{max-width:100%}
 
 .navigator-pagination{gap:8px}.navigator-pagination button{padding:6px 9px;font-size:.85rem}.navigator-pagination span{width:100%;text-align:center;order:1}
+
+.compiler-input{display:block;margin-top:16px}.compiler-input textarea{display:block;width:100%;margin-top:6px;padding:10px;font:inherit;color:inherit;background:#10141c;border:1px solid #45516a;border-radius:5px;resize:vertical}.compiler-input textarea:focus-visible{outline:2px solid #a7caff;outline-offset:3px}.execution-result{margin:18px 0;border-top:1px solid #344055;padding-top:10px}.execution-result [role=alert]{color:#ffb4b4}

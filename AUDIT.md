@@ -1,5 +1,7 @@
 # Final audit - 2026-10-19
 
+This report records the audit before Judge0 integration. Run Code is now connected to Judge0 Java 17. Live success, compilation-error, and runtime-exception cases passed in Node and development/production browsers; Run Tests remains disabled.
+
 Reviewed all 100 MCQs and 50 coding challenges for intended answers, explanations, assumptions, distinct scenarios, Java/Spring compatibility, starter code, solutions, and expected behavior. No question counts or difficulty totals changed.
 
 ## Corrections

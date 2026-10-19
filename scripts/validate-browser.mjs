@@ -38,7 +38,7 @@ try {
   function command(method, params = {}, sessionId) {
     return new Promise((resolve, reject) => {
       const id = ++sequence;
-      const timeout = setTimeout(() => { pending.delete(id); reject(new Error(`CDP timeout: ${method}`)); }, 45000);
+      const timeout = setTimeout(() => { pending.delete(id); reject(new Error(`CDP timeout: ${method}`)); }, 75000);
       pending.set(id, { resolve, reject, timeout });
       socket.send(JSON.stringify({ id, method, params, ...(sessionId ? { sessionId } : {}) }));
     });
@@ -48,16 +48,16 @@ try {
   await command('Runtime.enable', {}, sessionId);
   await command('Page.enable', {}, sessionId);
   await command('Page.navigate', { url }, sessionId);
-  async function evaluate(fn) {
-    const result = await command('Runtime.evaluate', { expression: `(${fn.toString()})()`, awaitPromise: true, returnByValue: true }, sessionId);
+  async function evaluate(fn, argument) {
+    const result = await command('Runtime.evaluate', { expression: `(${fn.toString()})(${JSON.stringify(argument)})`, awaitPromise: true, returnByValue: true }, sessionId);
     assert.ok(!result.exceptionDetails, result.exceptionDetails?.exception?.description || 'Browser assertion failed');
     return result.result.value;
   }
   await evaluate(async () => {
     window.qa = {
       assert(condition, message) { if (!condition) throw new Error(message); },
-      async wait(test, message) {
-        for (let i = 0; i < 400; i++) { if (test()) return; await new Promise(resolve => setTimeout(resolve, 25)); }
+      async wait(test, message, attempts = 400) {
+        for (let i = 0; i < attempts; i++) { if (test()) return; await new Promise(resolve => setTimeout(resolve, 25)); }
         throw new Error(message);
       },
       button(root, text) { return [...root.querySelectorAll('button')].find(button => button.textContent.trim() === text); },
@@ -108,7 +108,8 @@ try {
     await qa.wait(() => document.querySelector('.monaco-editor textarea'), 'Monaco did not load');
     qa.assert(qa.section().querySelectorAll('.navigator button').length === 20, 'Expected 20 challenges per page');
     qa.assert([...qa.section().querySelectorAll('details')].every(details => !details.open), 'Solution or hints revealed automatically');
-    qa.assert(qa.button(qa.section(), 'Run Code').disabled && qa.button(qa.section(), 'Run Tests').disabled, 'Execution must remain disabled');
+    qa.assert(!qa.button(qa.section(), 'Run Code').disabled, 'Run Code must be enabled for nonempty code');
+    qa.assert(qa.button(qa.section(), 'Run Tests').disabled, 'Automated tests must remain disabled');
     window.confirm = () => true;
     document.querySelector('.monaco-editor textarea').focus();
   });
@@ -152,8 +153,45 @@ try {
     await qa.wait(() => document.querySelector('.monaco-editor'), 'Coding mode did not reopen');
     qa.assert(document.documentElement.scrollWidth <= window.innerWidth, 'Coding layout overflow at mobile width');
   });
+  console.log('Headless browser checks passed: submit/reset/score/review, 22 topic filters in both modes, navigator pagination and four-column layout, Monaco editing/draft preservation/templates/reset, hidden solutions, Run Code availability, disabled automated tests, mode persistence, and mobile width.');
+  if (process.argv.includes('--compiler-live')) {
+    await command('Emulation.setDeviceMetricsOverride', { width: 1280, height: 900, deviceScaleFactor: 1, mobile: false }, sessionId);
+    const cases = [
+      { name: 'success with stdin', source: 'public class Main { public static void main(String[] args) { System.out.println("Hello, " + new java.util.Scanner(System.in).nextLine()); } }', stdin: 'Ada\n', status: 3, field: 'stdout', contains: 'Hello, Ada' },
+      { name: 'compilation error', source: 'public class Main { public static void main(String[] args) { System.out.println("missing semicolon") } }', status: 6, field: 'Compiler output', contains: 'error' },
+      { name: 'runtime exception', source: 'public class Main { public static void main(String[] args) { throw new IllegalStateException("runtime-test"); } }', status: 11, field: 'stderr', contains: 'IllegalStateException' },
+    ];
+    const failures = [];
+    for (const entry of cases) {
+      await evaluate(() => document.querySelector('.monaco-editor textarea').focus());
+      await command('Input.dispatchKeyEvent', { type: 'keyDown', modifiers: 2, key: 'a', code: 'KeyA', windowsVirtualKeyCode: 65 }, sessionId);
+      await command('Input.dispatchKeyEvent', { type: 'keyUp', modifiers: 0, key: 'a', code: 'KeyA', windowsVirtualKeyCode: 65 }, sessionId);
+      await command('Input.insertText', { text: entry.source }, sessionId);
+      const actual = await evaluate(async entry => {
+        const section = qa.section();
+        const input = section.querySelector('.compiler-input textarea');
+        Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set.call(input, entry.stdin || '');
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+        await new Promise(resolve => requestAnimationFrame(resolve));
+        qa.button(section, 'Run Code').click();
+        await qa.wait(() => section.querySelector('.execution-result[aria-busy="true"]'), 'Execution never entered loading state');
+        qa.assert(qa.button(section, 'Running...').disabled, 'Run Code should be disabled during execution');
+        await qa.wait(() => section.querySelector('.execution-result[aria-busy="false"]'), 'Execution did not complete', 2400);
+        const result = section.querySelector('.execution-result');
+        const fields = {};
+        for (const heading of result.querySelectorAll('h3')) fields[heading.textContent] = heading.nextElementSibling?.textContent;
+        return { status: result.querySelector('[role=status]')?.textContent, error: result.querySelector('[role=alert]')?.textContent, fields };
+      }, entry);
+      if (!actual.error && actual.status?.includes(`(${entry.status})`) && actual.fields[entry.field]?.includes(entry.contains)) {
+        console.log(`LIVE BROWSER PASS: ${entry.name}: ${actual.status}`);
+      } else {
+        failures.push({ name: entry.name, actual });
+        console.error(`LIVE BROWSER NOT VERIFIED: ${entry.name}: ${JSON.stringify(actual)}`);
+      }
+    }
+    assert.deepEqual(failures, [], 'Real Judge0 browser execution was blocked or returned unexpected results');
+  }
   assert.deepEqual(errors, [], 'Uncaught browser errors');
-  console.log('Headless browser checks passed: submit/reset/score/review, 22 topic filters in both modes, navigator pagination and four-column layout, Monaco editing/draft preservation/templates/reset, hidden solutions, disabled execution, mode persistence, and mobile width.');
   await command('Browser.close');
 } finally {
   socket?.close();

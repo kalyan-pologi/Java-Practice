@@ -12,7 +12,10 @@
                     "check:mcqs":  "node scripts/validate-mcqs.mjs",
                     "check:framework":  "node scripts/validate-framework.mjs",
                     "check:browser":  "node --experimental-websocket scripts/validate-browser.mjs",
-                    "check:render":  "node scripts/validate-render.mjs"
+                    "check:render":  "node scripts/validate-render.mjs",
+                    "check:compiler":  "node --test scripts/validate-compiler.test.mjs",
+                    "check:compiler:live":  "node scripts/validate-compiler-live.mjs",
+                    "check:compiler:browser":  "node --experimental-websocket scripts/validate-browser.mjs --compiler-live"
                 },
     "dependencies":  {
                          "react":  "^18.3.1",
